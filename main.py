@@ -1,12 +1,6 @@
-from nfstream import NFStreamer
-import pandas as pd
-import logging
-import inspect
 import click
-from scapy.all import IP, TCP, sr1, rdpcap, send, sniff
-import matplotlib.pyplot as plt
-from datetime import datetime
-from detection_rules import *
+from scapy.all import IP, TCP
+from application.detection_rules import *
 import random
 @click.group()
 def cli():
