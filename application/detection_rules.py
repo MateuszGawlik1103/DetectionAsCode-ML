@@ -19,7 +19,7 @@ def dns_query(packet):
     if packet.haslayer("UDP") and packet["UDP"].dport == 53:
         if packet.haslayer("DNS") and packet["DNS"].qr == 0:
             domain_name = packet["DNS"].qd.qname.decode("utf-8")
-            return True, f"DNS query for {domain_name} from {packet['IP'].src} to {packet['IP'].dst}"
+            return True, f"DNS query for {domain_name}"
     return False, None
 
 
@@ -41,26 +41,12 @@ def icmp_ping(packet):
     return False, None
 
 
-def rate_limiting(packet, threshold=50, delta_time=60):
-    """
-    Wykrywa przekroczenie limitu połączeń z tego samego IP.
-    """
-    connection_times = defaultdict(list)
-    current_time = time()
-    ip_src = packet["IP"].src
-    connection_times[ip_src].append(current_time)
-    connection_times[ip_src] = [t for t in connection_times[ip_src] if current_time - t < delta_time]
-
-    if len(connection_times[ip_src]) > threshold:
-        return True, f"Rate limit exceeded from {ip_src}"
-    return False, None
-
-
 syn_counter = defaultdict(list)
 
+
 def syn_flood(packet, threshold=100, delta_time=10):
-    if packet.haslayer(TCP) and packet[TCP].flags == "S":
-        ip_src = packet[IP].src
+    if packet.haslayer("TCP") and packet["TCP"].flags == "S":
+        ip_src = packet["IP"].src
         current_time = time()
         syn_counter[ip_src].append(current_time)
         syn_counter[ip_src] = [t for t in syn_counter[ip_src] if current_time - t <= delta_time]

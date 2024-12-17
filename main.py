@@ -1,82 +1,79 @@
+import os
+import signal
+import sys
+from datetime import datetime
 import click
-from scapy.all import IP, TCP
-from application.detection_rules import *
-import random
+from scapy.all import rdpcap
+from scapy.sendrecv import sniff
+from application import detection_rules
+import atexit
+from application.csv import csv_append, csv_read
+from application.flow_analysis import flows_summary
+from application.visualization import generate_plot
+
+DEFAULT_CSV_FILE = "alerts.csv"
+TEMP_DIR = "temp"
+OUTPUT_IMAGE = "output.png"
+DETECTION_RULES = [
+    getattr(detection_rules, rule)
+    for rule in dir(detection_rules)
+    if callable(getattr(detection_rules, rule))
+    and getattr(detection_rules, rule).__module__ == detection_rules.__name__
+]
+
+
 @click.group()
 def cli():
     pass
 
-def detect(packet):
-    result, message = http_get(packet)
-    if result:
-        print(f"{datetime.now()} - \033[31mALERT:\033[0m {message}")
-        
-    result, message = dns_query(packet)
-    if result:
-        print(f"{datetime.now()} - \033[31mALERT:\033[0m {message}")
-        
-    result, message = ssh_connection(packet)
-    if result:
-        print(f"{datetime.now()} - \033[31mALERT:\033[0m {message}")
-        
-    result, message = icmp_ping(packet)
-    if result:
-        print(f"{datetime.now()} - \033[31mALERT:\033[0m {message}")
-        
-    result, message = rate_limiting(packet)
-    if result:
-        print(f"{datetime.now()} - \033[31mALERT:\033[0m {message}")
-        
-    result, message = syn_flood(packet)
-    if result:
-        print(f"{datetime.now()} - \033[31mALERT:\033[0m {message}")
-        
-        
+
+@click.command()
+@click.argument("pcap_file")
+@click.option("--summary", "-s", is_flag=True)
+def analyze_pcap(pcap_file, summary):
+    packets = rdpcap(pcap_file)
+    csv_file = f"{TEMP_DIR}/{pcap_file}.csv"
+    for packet in packets:
+        detect(packet, csv_file)
+    data = csv_read(csv_file)
+    generate_plot(data, OUTPUT_IMAGE)
+    if summary:
+        print(flows_summary(pcap_file))
+
+
+def detect(packet, csv_file=DEFAULT_CSV_FILE):
+    for rule in DETECTION_RULES:
+        result, message = rule(packet)
+        if result:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            csv_append(csv_file, timestamp, message)
+            print(f"{timestamp} - \033[31mALERT:\033[0m {message}")
+
+
 @click.command()   
 @click.argument("interface")  
-def sniffer(interface):
-    print(f"{datetime.now()} - Starting packet sniffer...")
+def listen(interface):
+    print(f"{datetime.now()} - INFO - Listening on interface {interface}...")
     sniff(iface=interface, prn=lambda packet: detect(packet), store=0)
-            
 
-@click.command()
-@click.argument("target_ip")
-@click.argument("ports", nargs=-1, type=int)
-def simulate_port_scan(target_ip, ports):
-    for port in ports:
-        packet = IP(dst=target_ip) / TCP(dport=port, flags="S")
-        response = sr1(packet, timeout=1, verbose=0)
-        
-        if response and response.haslayer(TCP):
-            if response["TCP"].flags == "SA":
-                print(f"Port {port}: Open")
-            elif response["TCP"].flags == "RA":
-                print(f"Port {port}: Closed")
-        else:
-            print(f"Port {port}: No response")
-            
-@click.command()
-@click.argument("target_ip")
-@click.argument("target_port", type=int)
-@click.argument("packet_count", type=int)
-def simulate_syn_flood(target_ip, target_port, packet_count):
-    print(f"Launching SYN flood attack on {target_ip}:{target_port} with {packet_count} packets.")
-    
-    for _ in range(packet_count):
-        src_ip = f"{random.randint(1, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(0, 255)}"
-        src_port = random.randint(1024, 65535)
-        ip_layer = IP(src=src_ip, dst=target_ip)
-        tcp_layer = TCP(sport=src_port, dport=target_port, flags="S")
-        packet = ip_layer / tcp_layer
-        send(packet, verbose=False)
-
-    print("Attack completed.")
-   
+    def handle_sigint():
+        data = csv_read(DEFAULT_CSV_FILE)
+        generate_plot(data, OUTPUT_IMAGE)
+        sys.exit(0)
+    signal.signal(signal.SIGINT, handle_sigint())
 
 
-cli.add_command(sniffer)
-cli.add_command(simulate_port_scan)
-cli.add_command(simulate_syn_flood)
+def delete_temp_files():
+    for file_name in os.listdir(TEMP_DIR):
+        file_path = os.path.join(TEMP_DIR, file_name)
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+
+
+atexit.register(delete_temp_files)
+cli.add_command(listen)
+cli.add_command(analyze_pcap)
+
 
 if __name__ == "__main__":
     cli()

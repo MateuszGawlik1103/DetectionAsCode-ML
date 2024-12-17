@@ -6,7 +6,7 @@ from datetime import datetime
 def generate_plot(data, output_file):
     timestamps = []
     for row in data:
-        timestamp = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S.%f").strftime('%Y-%m-%d %H:%M:%S')
+        timestamp = datetime.strptime(row[0], "%Y-%m-%d %H:%M:%S").strftime('%Y-%m-%d %H:%M:%S')
         timestamps.append(timestamp)
 
     time_counts = Counter(timestamps)
