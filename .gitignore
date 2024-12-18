@@ -163,4 +163,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 alerts.json
-learn.py
+learn*.py
+decision_tree_model.pkl
