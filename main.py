@@ -35,8 +35,9 @@ def analyze_pcap(pcap_file, summary):
     csv_file = f"{TEMP_DIR}/{pcap_file}.csv"
     for packet in packets:
         detect(packet, csv_file)
-    data = csv_read(csv_file)
-    generate_plot(data, OUTPUT_IMAGE)
+    if os.path.exists(f"{TEMP_DIR}/{pcap_file}.csv"):
+        data = csv_read(csv_file)
+        generate_plot(data, OUTPUT_IMAGE)
     if summary:
         print(flows_summary(pcap_file))
 
@@ -45,9 +46,10 @@ def detect(packet, csv_file=DEFAULT_CSV_FILE):
     for rule in DETECTION_RULES:
         result, message = rule(packet)
         if result:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            csv_append(csv_file, timestamp, message)
-            print(f"{timestamp} - \033[31mALERT:\033[0m {message}")
+            timestamp = datetime.now()
+            if csv_file is not None:
+                csv_append(csv_file, timestamp, message)
+            print(f"{timestamp} - \033[31mALERT\033[0m - {message}")
 
 
 @click.command()   
